@@ -1,0 +1,10 @@
+[theme]
+base = "light"
+
+[global]
+# The tree's data is about 14 kB when nothing is filtered. That is above Streamlit's
+# default limit of 10 kB for replacing a repeated message by a short hash. After many
+# quick filter changes the browser can then miss the message, and the page stops with
+# a "Connection error: Cached ForwardMsg MISS". With the limit raised the data is
+# simply sent again each time, which costs a few kilobytes per run. (See the README.)
+minCachedMessageSize = 1000000

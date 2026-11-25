@@ -1,0 +1,12 @@
+target-version = "py311"
+line-length = 88
+
+[lint]
+# E/W: pycodestyle, F: pyflakes, I: isort, UP: pyupgrade, B: bugbear,
+# SIM: simplify, S: bandit rules, C4: comprehensions, PT: pytest style,
+# RUF100: noqa comments that no longer do anything
+select = ["E", "W", "F", "I", "UP", "B", "SIM", "S", "C4", "PT", "RUF100"]
+
+[lint.per-file-ignores]
+# asserts are what tests are made of; long test names and divider comments are fine
+"tests/*" = ["S101", "E501"]
