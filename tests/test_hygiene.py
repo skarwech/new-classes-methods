@@ -171,10 +171,9 @@ def test_development_tools_are_in_a_differently_named_file() -> None:
         assert re.search(rf"^{tool}==", text, re.MULTILINE), tool
 
 
-def test_the_data_folder_holds_only_the_public_csv() -> None:
-    assert [path.name for path in (SITE_ROOT / "data").iterdir()] == [
-        "methods_public.csv"
-    ]
+def test_the_data_folder_holds_only_the_methods_and_their_abstracts() -> None:
+    names = sorted(path.name for path in (SITE_ROOT / "data").iterdir())
+    assert names == ["abstracts.csv", "methods_public.csv"]
 
 
 def test_gitignore_keeps_caches_environments_and_test_output_out() -> None:
@@ -207,6 +206,8 @@ def test_the_readme_documents_the_commands_that_exist() -> None:
         "ruff check",
         "bandit",
         "?m=",
+        "tools/fetch_abstracts.py",
+        "--refresh",
     ):
         assert command in readme, command
 
@@ -222,3 +223,29 @@ def test_every_python_module_has_a_docstring() -> None:
         and ast.get_docstring(ast.parse(read(path))) is None
     ]
     assert not missing, missing
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "data/.abstracts-k3j2h1.tmp",  # left by an interrupted write
+        "data/abstracts.csv.new",  # the side file when abstracts.csv could not be updated
+        ".coverage.host.1234",
+        ".env",
+        ".env.local",
+    ],
+)
+def test_git_ignores_files_that_must_never_be_added(name: str) -> None:
+    import shutil
+    import subprocess
+
+    git = shutil.which("git")
+    if git is None or not (SITE_ROOT / ".git").exists():
+        pytest.skip("not a git checkout")
+    result = subprocess.run(  # noqa: S603 - fixed arguments
+        [git, "check-ignore", "-q", name],
+        cwd=SITE_ROOT,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, f"{name} is not ignored by .gitignore"

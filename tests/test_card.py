@@ -8,6 +8,11 @@ import pandas as pd
 import pytest
 
 from explorer.card import (
+    REFERENCE_LABEL,
+    abstract_heading,
+    abstract_html,
+    abstract_source_markdown,
+    abstract_text,
     author_names,
     byline,
     card_markdown,
@@ -179,7 +184,7 @@ def test_card_for_a_method_with_an_official_repository_and_a_library_alternative
         "(https://github.com/Jingkang50/OpenOOD/blob/HEAD/openood/postprocessors/openmax_postprocessor.py)"
     ) in card
     assert "**Reference check:** Checked against the source" in card
-    assert card.rstrip().endswith("**Reference**")
+    assert card.rstrip().endswith("**Reference check:** Checked against the source")
 
 
 def test_card_without_public_code_says_so_in_words_and_has_no_code_link(
@@ -222,7 +227,7 @@ def test_a_row_with_no_authors_title_or_venue_still_gives_a_card() -> None:
     assert blocks[1].startswith(
         "**Paper:**"
     )  # straight on to the links: no empty detail block
-    assert blocks[-1] == "**Reference**"
+    assert blocks[-1].startswith("**Paper:**")  # the links are the last block
 
 
 @pytest.mark.parametrize(
@@ -302,3 +307,67 @@ def test_every_card_in_the_collection_builds_with_safe_links(
         assert md_escape(row["title"]) in card, row["id"]
         assert md_escape(row["venue"]) in card, row["id"]
         assert reference_text(row).endswith((".", "?", "!")), row["id"]
+
+
+# --- the abstract ---------------------------------------------------------------------
+
+ABSTRACT = "Traditional classifiers are deployed under a closed-set setting. " * 3
+
+
+def with_abstract(**overrides: str) -> dict[str, str]:
+    fields = {
+        "abstract": ABSTRACT,
+        "abstract_source": "arXiv",
+        "abstract_url": "https://arxiv.org/abs/1511.06233",
+        "abstract_match": "arxiv id",
+    }
+    return {**make_row(), **fields, **overrides}
+
+
+def test_the_reference_label_is_its_own_text() -> None:
+    assert REFERENCE_LABEL == "**Reference**"
+    assert REFERENCE_LABEL not in card_markdown(make_row())  # the page adds it
+
+
+def test_a_method_with_an_abstract_has_a_heading_and_a_source_line() -> None:
+    row = with_abstract()
+    assert abstract_text(row) == ABSTRACT.strip()
+    assert abstract_heading(row) == "**Abstract**"
+    assert abstract_source_markdown(row) == (
+        "*Source: [arXiv](https://arxiv.org/abs/1511.06233)*"
+    )
+
+
+def test_a_method_without_an_abstract_says_so_and_has_no_source_line() -> None:
+    row = make_row()  # no abstract fields at all
+    assert abstract_text(row) == ""
+    assert abstract_heading(row) == "**Abstract:** none recorded"
+    assert abstract_source_markdown(row) == ""
+    assert abstract_html(row) == ""
+    blank = {**row, "abstract": "", "abstract_source": "", "abstract_url": ""}
+    assert abstract_heading(blank) == "**Abstract:** none recorded"
+
+
+def test_the_abstract_is_shown_as_escaped_plain_text_never_as_markup() -> None:
+    hostile = (
+        'A <script>alert(1)</script> & "quoted" $x_1$ *bold* [link](http://x.org) :smile: '
+        * 3
+    )
+    html_text = abstract_html(with_abstract(abstract=hostile))
+    assert html_text.startswith("<p>")
+    assert html_text.endswith("</p>")
+    inner = html_text[3:-4]
+    assert "<" not in inner
+    assert ">" not in inner
+    assert "&lt;script&gt;alert(1)&lt;/script&gt; &amp; " in inner
+    assert "$x_1$ *bold* [link](http://x.org) :smile:" in inner  # kept as typed
+
+
+def test_the_source_label_and_link_are_safe() -> None:
+    row = with_abstract(
+        abstract_source="Manual", abstract_url="https://example.org/a_(b)"
+    )
+    assert (
+        abstract_source_markdown(row)
+        == "*Source: [Manual](https://example.org/a_%28b%29)*"
+    )

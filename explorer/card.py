@@ -4,11 +4,14 @@ Everything that comes from the CSV is escaped before it is put into markdown, so
 that a stray ``*``, ``_``, ``[``, ``$`` or ``#`` in a title cannot change the layout
 or start math. Escaping cannot stop the renderer from turning ``:name:`` into an emoji
 or a web address into a link, so the loader refuses such text instead (see
-``data.py``). The reference for copying is plain text and is not escaped.
+``data.py``). The reference for copying is plain text and is not escaped. An abstract
+is third-party text of any shape, so it is not put into markdown at all: it is HTML
+escaped and shown as one paragraph (``abstract_html``).
 """
 
 from __future__ import annotations
 
+import html
 import re
 from collections.abc import Mapping
 
@@ -18,6 +21,9 @@ from .links import AltCode, paper_link_label, parse_code_alt, repo_name, safe_ur
 Row = Mapping[str, str]
 
 _HARD_BREAK = "  \n"
+
+# The label above the copyable reference; the page puts the abstract before it.
+REFERENCE_LABEL = "**Reference**"
 
 # Characters that format text inline in markdown ("$" starts math in Streamlit).
 _INLINE_SPECIALS = re.compile(r"([\\`*_\[\]<>~$|&#])")
@@ -122,7 +128,7 @@ def _code_lines(row: Row) -> list[str]:
 
 
 def card_markdown(row: Row) -> str:
-    """Everything on the card above the copyable reference, as markdown."""
+    """The name, details and links of the card as markdown; no abstract or reference."""
     title = f"*{md_escape(row['title'])}*" if row["title"] else ""
     details = [line for line in (byline(row), title, md_escape(row["venue"])) if line]
     blocks = [f"### {md_escape(row['method'])}"]
@@ -134,5 +140,29 @@ def card_markdown(row: Row) -> str:
         f"**Reference check:** {CHECK_LABELS[row['check']]}",
     ]
     blocks.append(_HARD_BREAK.join(links))
-    blocks.append("**Reference**")
     return "\n\n".join(blocks)
+
+
+# --- the abstract ---------------------------------------------------------------------
+
+
+def abstract_text(row: Row) -> str:
+    return row.get("abstract", "").strip()
+
+
+def abstract_heading(row: Row) -> str:
+    """The label above the abstract; for a method without one, the whole line."""
+    return "**Abstract**" if abstract_text(row) else "**Abstract:** none recorded"
+
+
+def abstract_html(row: Row) -> str:
+    """The abstract as one paragraph of escaped text: no markdown, markup or links."""
+    text = abstract_text(row)
+    return f"<p>{html.escape(text, quote=False)}</p>" if text else ""
+
+
+def abstract_source_markdown(row: Row) -> str:
+    """ "Source: arXiv" with a link to the record the abstract was taken from."""
+    if not abstract_text(row) or not row.get("abstract_url"):
+        return ""
+    return f"*Source: {_link(row['abstract_source'], row['abstract_url'])}*"

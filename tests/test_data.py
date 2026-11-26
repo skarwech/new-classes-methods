@@ -8,7 +8,12 @@ import pandas as pd
 import pytest
 
 from explorer.constants import PUBLIC_COLUMNS
-from explorer.data import DataError, load_methods, prepare_methods
+from explorer.data import (
+    DataError,
+    has_control_character,
+    load_methods,
+    prepare_methods,
+)
 from tests.conftest import make_raw_frame, make_row, write_csv
 
 pytestmark = pytest.mark.unit
@@ -218,7 +223,7 @@ def test_prepare_does_not_mutate_its_input() -> None:
     assert prepared is not raw
 
 
-# --- hardening found in review ---------------------------------------------------------
+# --- hardening found in review --------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -238,10 +243,61 @@ def test_plain_ids_are_accepted(tmp_path: Path, good_id: str) -> None:
     assert _load(tmp_path, make_row(id=good_id)).loc[0, "id"] == good_id
 
 
+def test_a_lone_surrogate_counts_as_a_control_character() -> None:
+    assert has_control_character("a" + chr(0xD835) + "b")
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "a\nb",
+        "a\tb",
+        "a\x00b",
+        "a\x7fb",
+        "a\x85b",  # C0, DEL, C1
+        "a\u2028b",
+        "a\u2029b",  # line and paragraph separators
+        "a\u200bb",
+        "a\ufeffb",
+        "a\u200eb",
+        "a\u202eb",
+        "a\u2066b",  # zero width, bidi
+        "a\u2060b",
+        "a\u061cb",
+        "a\U000e0041b",  # word joiner, Arabic mark, tag letter
+        "a\u00adb",  # soft hyphen
+    ],
+)
+def test_has_control_character_finds_every_invisible_or_layout_changing_character(
+    text: str,
+) -> None:
+    assert has_control_character(text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "",
+        "plain text, with punctuation: (x) [y] {z}",
+        "Halász – naïve “quotes” 日本語 \U0001f600 a b",
+    ],
+)
+def test_has_control_character_accepts_ordinary_text(text: str) -> None:
+    assert not has_control_character(text)
+
+
 @pytest.mark.parametrize("column", ["method", "authors_surnames", "title", "venue"])
 @pytest.mark.parametrize(
     "value",
-    ["two\nlines", "a\rb", "tab\there", "bidi ‮ text", "zero​width"],
+    [
+        "two\nlines",
+        "a\rb",
+        "tab\there",
+        "bidi \u202e text",
+        "zero\u200bwidth",
+        "word\u2060joiner",
+        "soft\u00adhyphen",
+    ],
 )
 def test_text_cells_may_not_hold_line_breaks_or_control_characters(
     tmp_path: Path, column: str, value: str

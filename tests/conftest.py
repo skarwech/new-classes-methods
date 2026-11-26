@@ -60,6 +60,29 @@ def write_csv(path: Path, *rows: dict[str, str], bom: bool = True) -> Path:
     return path
 
 
+_DEFAULT_ABSTRACT = {
+    "id": "1",
+    "method_title": "A Title",
+    "abstract": "This is an abstract that is long enough to be a real one. " * 3,
+    "abstract_source": "arXiv",
+    "abstract_url": "https://arxiv.org/abs/1511.06233",
+    "abstract_match": "arxiv id",
+}
+
+
+def make_abstract(**overrides: str) -> dict[str, str]:
+    """One synthetic line of abstracts.csv."""
+    return {**_DEFAULT_ABSTRACT, **overrides}
+
+
+def write_abstracts_csv(path: Path, *rows: dict[str, str]) -> Path:
+    columns = list(_DEFAULT_ABSTRACT)
+    pd.DataFrame(list(rows), columns=columns, dtype=str).to_csv(
+        path, index=False, encoding="utf-8-sig"
+    )
+    return path
+
+
 @pytest.fixture(scope="session")
 def methods() -> pd.DataFrame:
     """The real, prepared public table."""

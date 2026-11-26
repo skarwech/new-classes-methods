@@ -6,8 +6,9 @@ import pandas as pd
 import pytest
 from playwright.sync_api import Browser, Page
 
+from explorer.abstracts import load_collection
 from explorer.card import reference_text
-from explorer.constants import CHECK_LABELS, CODE_LABELS
+from explorer.constants import CHECK_LABELS, CODE_LABELS, DATA_PATH
 from explorer.links import paper_link_label, parse_code_alt, repo_name
 from tests.test_text import EMOJI_OR_PICTOGRAPH
 
@@ -51,11 +52,16 @@ def expected_links(row: dict[str, str]) -> list[str]:
     return lines
 
 
-def test_every_card_shows_exactly_what_the_data_says(
-    cards_page: Page, methods: pd.DataFrame
-) -> None:
+def expected_abstract_paragraphs(row: dict[str, str]) -> list[str]:
+    """The paragraphs after the links: the heading, and the text and source if any."""
+    if not row["abstract"]:
+        return ["Abstract: none recorded"]
+    return ["Abstract", row["abstract"], f"Source: {row['abstract_source']}"]
+
+
+def test_every_card_shows_exactly_what_the_data_says(cards_page: Page) -> None:
     problems = []
-    for row in methods.to_dict(orient="records"):
+    for row in load_collection(DATA_PATH).to_dict(orient="records"):
         box = cards_page.locator(f".st-key-card-{row['id']}")
         heading = box.locator("h3").inner_text().strip()
         paragraphs = [text.strip() for text in box.locator("p").all_inner_texts()]
@@ -66,7 +72,8 @@ def test_every_card_shows_exactly_what_the_data_says(
             "heading": (heading, row["method"]),
             "details": (shown_details, expected_details(row)),
             "links": (shown_links, expected_links(row)),
-            "label": (paragraphs[2], "Reference"),
+            "abstract": (paragraphs[2:-1], expected_abstract_paragraphs(row)),
+            "label": (paragraphs[-1], "Reference"),
             "reference": (reference, reference_text(row)),
         }
         problems += [

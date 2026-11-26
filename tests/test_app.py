@@ -18,7 +18,14 @@ from explorer import text
 from explorer.card import card_markdown, reference_text
 from explorer.constants import TREE_HEIGHT, TREE_INDENT, TREE_ROW_HEIGHT
 from explorer.tree import family_id, section_id, type_id
-from tests.conftest import CSV_PATH, SITE_ROOT, make_row, write_csv
+from tests.conftest import (
+    CSV_PATH,
+    SITE_ROOT,
+    make_abstract,
+    make_row,
+    write_abstracts_csv,
+    write_csv,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -523,7 +530,7 @@ def test_the_shipped_csv_is_the_one_the_app_reads() -> None:
     assert DATA_PATH.is_file()
 
 
-# --- the data file can change while the server keeps running ---------------------------
+# --- the data file can change while the server keeps running --------------------------
 
 
 def test_a_changed_data_file_is_picked_up_without_touching_any_code(
@@ -567,3 +574,99 @@ def test_a_data_file_with_a_single_year_has_no_year_slider(
     assert not at.exception
     assert len(at.slider) == 0
     assert f"**{text.count_text(2, 2)}**" in sidebar_markdown(at)
+
+
+# --- abstracts -------------------------------------------------------------------------
+
+
+def card_html(at: AppTest) -> list[str]:
+    return [element.value for element in at.columns[1].get("html")]
+
+
+def test_the_abstract_sits_between_the_details_and_the_reference(
+    tree: TreeRecorder,
+) -> None:
+    at = new_app()
+    at.query_params["m"] = "4"
+    at.run()
+    shown = card_column_markdown(at)
+    assert shown[1] == "**Abstract**"
+    assert shown[2] == "*Source: [arXiv](https://arxiv.org/abs/1511.06233)*"
+    assert shown[3] == "**Reference**"
+    (paragraph,) = card_html(at)
+    assert paragraph.startswith("<p>Deep networks have produced")
+    assert [element.value for element in at.code][0].startswith("Bendale, Boult (2016)")
+
+
+def test_a_method_without_an_abstract_says_so(tree: TreeRecorder) -> None:
+    at = new_app()
+    at.query_params["m"] = "112"  # MINAS: no open source carries its abstract
+    at.run()
+    shown = card_column_markdown(at)
+    assert shown[1] == "**Abstract:** none recorded"
+    assert shown[2] == "**Reference**"
+    assert card_html(at) == []
+
+
+def test_nothing_selected_shows_no_abstract_section(tree: TreeRecorder) -> None:
+    at = new_app().run()
+    assert card_html(at) == []
+    shown = card_column_markdown(at)
+    assert "**Abstract**" not in shown
+    assert not any(value.startswith("**Abstract:**") for value in shown)
+
+
+def _collection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, **abstract: str
+) -> Path:
+    methods = write_csv(
+        tmp_path / "methods.csv", make_row(id="1", title="A Title", method="Alpha")
+    )
+    write_abstracts_csv(tmp_path / "abstracts.csv", make_abstract(id="1", **abstract))
+    monkeypatch.setattr("explorer.constants.DATA_PATH", methods)
+    return methods
+
+
+def test_hostile_abstract_text_is_shown_as_text_not_markup(
+    tree: TreeRecorder, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hostile = "Look: <img src=x onerror=alert(1)> and <script>alert(2)</script> " * 4
+    _collection(tmp_path, monkeypatch, abstract=hostile)
+    at = new_app()
+    at.query_params["m"] = "1"
+    at.run()
+    (paragraph,) = card_html(at)
+    assert "<img" not in paragraph
+    assert "<script" not in paragraph
+    assert "&lt;img src=x onerror=alert(1)&gt;" in paragraph
+
+
+def test_an_abstracts_file_for_other_titles_stops_the_page_with_a_clear_message(
+    tree: TreeRecorder, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _collection(tmp_path, monkeypatch, method_title="A Different Paper")
+    at = new_app().run()
+    assert [element.value for element in at.error] == [text.DATA_ERROR]
+    assert any("fetch_abstracts" in element.value for element in at.code)
+    assert not tree.calls
+
+
+def test_a_changed_abstracts_file_is_picked_up_without_touching_any_code(
+    tree: TreeRecorder, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import os
+
+    _collection(tmp_path, monkeypatch, abstract="First version of the abstract. " * 5)
+    at = new_app()
+    at.query_params["m"] = "1"
+    at.run()
+    assert card_html(at)[0].startswith("<p>First version")
+
+    path = write_abstracts_csv(
+        tmp_path / "abstracts.csv",
+        make_abstract(id="1", abstract="Second version. " * 10),
+    )
+    stamp = path.stat().st_mtime_ns + 5_000_000_000
+    os.utime(path, ns=(stamp, stamp))
+    at.run()
+    assert card_html(at)[0].startswith("<p>Second version")

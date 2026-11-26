@@ -3,7 +3,7 @@
 A read-only website that shows a collection of methods for handling classes a model did
 not see in training. The methods are shown as a collapsible tree: four paradigm families
 (Unknown Rejection, Class Discovery, Model Integration, Stream Adaptation) and a group of
-pipeline references. Click a method to see its reference, a link to the paper, a link to
+pipeline references. Click a method to see its reference, its abstract, a link to the paper, a link to
 the code and how far the reference has been checked. A sidebar searches (ignoring accents
 and case) and filters by family, code availability, reference check and year, and
 downloads the filtered rows as CSV.
@@ -34,6 +34,8 @@ A link ending in `?m=<id>` opens that method with its folders expanded, for exam
 app.py                      page layout and wiring
 explorer/                   the logic, as small modules that are easy to test
   data.py                   read and validate the CSV
+  abstracts.py              read data/abstracts.csv and attach the abstracts
+  render.py                 draws one method: card, abstract with source, reference
   filters.py, textfold.py   search and filters, accent folding
   tree.py                   build the tree, labels, what to open when it is mounted
   selection.py              which method is selected
@@ -41,7 +43,13 @@ explorer/                   the logic, as small modules that are easy to test
   constants.py              column names, code and check labels, layout numbers
   text.py                   title, how-to-read text, messages
   export.py                 CSV download
-data/methods_public.csv     the data (the only data file)
+data/methods_public.csv     the methods
+data/abstracts.csv          their abstracts (written by tools/fetch_abstracts.py)
+tools/                      fetches the abstracts; not part of the running site
+  fetch_abstracts.py        the command, the order of the sources, the file
+  abstract_parsing.py       titles, identifiers, cleaning, one parser per source
+  abstract_web.py           the web client: known hosts, https, limits, retries
+  abstract_file.py          read, check and write abstracts.csv; typed lines
 .streamlit/config.toml      theme and one server setting (see below)
 requirements.txt            the two pinned runtime dependencies
 tests/                      unit, whole-script and browser tests
@@ -78,6 +86,84 @@ reads the file again when it changes (its modification time is part of the cache
 no restart is needed. The tests quote counts of the shipped data (170 methods, 63/31/23/43/10
 per family, and so on): after a change, run `pytest` and update the numbers it flags,
 starting with `tests/test_public_csv.py`. The app itself never hard-codes a count.
+
+### Abstracts
+
+The public CSV has no abstract column, and it is regenerated from the author's working
+file, so the abstracts live in a second file, `data/abstracts.csv`, next to it. Each line
+has the method `id`, the `method_title` it was fetched for, `source_title` (what the
+source calls the paper, for people checking the file), the `abstract` (one line of plain
+text), where it came from (`abstract_source`: arXiv, OpenAlex, Crossref, CVF, PMLR or
+Manual), a link to that record (`abstract_url`) and how it was matched (`abstract_match`:
+arxiv id, doi, paper url, title or manual). The card shows the abstract with its source;
+the CSV download carries the abstract columns (not `source_title`).
+
+`tools/fetch_abstracts.py` writes the file. It uses only the standard library and the open
+interfaces of arXiv, OpenAlex, Crossref and the CVF and PMLR paper pages. Run it from the
+site folder:
+
+```bash
+python -m tools.fetch_abstracts            # fetch only what is missing
+python -m tools.fetch_abstracts --refresh  # look for newer text for every method
+```
+
+For each method it tries the arXiv id, then the DOI, then the paper page, then a title
+search. Whatever it finds is checked against the method's title, so a wrong identifier is
+rejected rather than stored. A title search is weaker evidence and has to pass more: the
+title almost identical, the year within three, the record a paper (OpenAlex also holds
+datasets and reviews under the title of a paper), no other DOI than the method's, and at
+least one author named in the methods file. It sends a generic User-Agent and no contact
+details, contacts only those five sites over https, follows a redirect only to one of
+them, reads at most 2 MB of any answer, and waits between calls (arXiv asks for one every
+three seconds). It gives up on a site that fails five calls in a row, and does not call an
+endpoint again until the pause it asked for is over. OpenReview, ScienceDirect and IEEE
+refuse automated clients and are not used.
+
+`--refresh` replaces an automatic abstract only with a find that is matched at least as
+strongly (an arXiv id beats a title match), so a refresh with the network down, or with a
+source that is out of budget, loses nothing. The file is saved every 20 methods and again
+at the end, each time as a complete new file or not at all, so an interrupt loses little.
+The exit status is 0 on success (even if some methods have no abstract), 1 if a source
+failed along the way (the file is still written; run it again later to fill the gaps), 2
+if a file could not be read or written or a typed line needs attention, and 130 if
+interrupted.
+
+OpenAlex gives anonymous clients a small daily budget that is shared by everyone behind
+the same IP address. When it is used up, OpenAlex searches fail until midnight UTC and the
+tool says so; DOI lookups, arXiv and Crossref still work. Run the tool again later and it
+fetches only what is missing.
+
+The link of a line must be on the site its source lives on (arxiv.org for arXiv,
+openalex.org or doi.org for OpenAlex, and so on), https, with no user name in it; a
+`Manual` line may link anywhere, over http or https. The page refuses a file with any
+other link, and the tool never writes one.
+
+The page attaches an abstract by id, and only when the title recorded in the file is the
+method's title now. A line that no longer fits (the method was retitled, or removed) is
+left out and a warning is logged, so one correction in the methods file does not take the
+page down; run the tool again and it fetches that method afresh. If most lines do not fit,
+the file belongs to another version of the methods and the page stops with a message. The
+file is optional: without it the cards simply say that no abstract is recorded.
+
+As delivered, 146 of the 170 methods have an abstract. The other 24 are older or
+publisher-restricted papers whose abstracts none of these open sources carry (for example
+several Springer and Elsevier papers, a 1954 Biometrika article, and one OpenReview
+submission). OpenAlex also lists a dataset under the title of one of them (OSNN, id 14);
+the tool refuses it because it is not the paper. To fill a gap by hand, add a line with the source `Manual`, the match `manual`, the
+`method_title` of the method and a link to the page you copied it from. The tool never
+fetches or replaces such a line, not even with `--refresh`, and keeps one you add or
+correct while it is running. Line breaks in pasted text become spaces. If a typed line
+does not fit (the method was retitled or removed, or the site would refuse the line), the
+tool stops before fetching anything and says which line and why, instead of dropping
+your text. Abstracts are shown as plain text, so any LaTeX in them appears as typed.
+
+In the CSV download any cell that starts with `=`, `+`, `-` or `@` (an abstract is text
+from a third party) is led by a quote, so that a spreadsheet shows it as text instead of
+running it as a formula.
+
+Abstracts belong to their authors and publishers. They are shown here with their source
+and a link, which is the usual practice for a reading list; if the repository becomes
+public, check that this is acceptable for the sources you use.
 
 ## Deploy to Streamlit Community Cloud
 
@@ -149,6 +235,9 @@ many times the script has run, so that a click can be checked to cause exactly o
 to settle. Set `E2E_BASE_URL` to run them against a server that is already running.
 
 ## Known limits
+
+- 24 methods have no abstract (see "Abstracts"). For a method that appeared first as a
+  preprint, the abstract can be the preprint's rather than the published version's.
 
 - On a phone, a few of the longest labels are cut off by the tree component, which cannot
   wrap them. The indent is 16 px to leave as much room as possible; shorten the labels in

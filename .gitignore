@@ -13,3 +13,7 @@ tests/e2e/artifacts/
 .idea/
 .vscode/
 *.pyc
+.coverage.*
+.env.*
+.abstracts-*.tmp
+data/*.new

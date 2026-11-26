@@ -3,6 +3,7 @@ branch = True
 source =
     explorer
     app
+    tools
 
 [report]
 show_missing = True

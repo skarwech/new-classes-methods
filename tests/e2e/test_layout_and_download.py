@@ -10,7 +10,7 @@ import pytest
 from playwright.sync_api import Page, expect
 
 from explorer import text
-from explorer.constants import PUBLIC_COLUMNS, TREE_HEIGHT
+from explorer.constants import ABSTRACT_FIELDS, PUBLIC_COLUMNS, TREE_HEIGHT
 from tests.e2e import helpers as h
 
 pytestmark = pytest.mark.e2e
@@ -74,8 +74,10 @@ def test_the_download_gives_the_filtered_rows_as_csv(page: Page) -> None:
     text = Path(download.path()).read_bytes().decode("utf-8-sig")
     rows = list(csv.DictReader(io.StringIO(text)))
     assert [row["id"] for row in rows] == ["N3", "N4"]
-    assert list(rows[0]) == list(PUBLIC_COLUMNS)
+    assert list(rows[0]) == [*PUBLIC_COLUMNS, *ABSTRACT_FIELDS]
     assert rows[0]["method"].startswith("Halász")  # accents survive
+    assert rows[0]["abstract_source"]
+    assert rows[0]["abstract"]
     assert h.settle(page) == before  # the click does not rerun the script
 
 
@@ -92,7 +94,7 @@ def test_no_javascript_errors_during_a_typical_visit(open_at) -> None:
     assert errors == []
 
 
-# --- a phone (390 px wide) -----------------------------------------------------------
+# --- a phone (390 px wide) ------------------------------------------------------------
 
 
 def test_on_a_phone_the_columns_stack_and_the_card_sits_under_the_tree(

@@ -26,7 +26,7 @@ def test_links_open_in_a_new_tab_and_say_what_they_are(open_at) -> None:
     h.expect_card(page, "OpenMax")
     area = card_area(page)
 
-    paper = area.get_by_role("link", name="arXiv", exact=True)
+    paper = area.get_by_role("link", name="arXiv", exact=True).first  # the paper link
     expect(paper).to_have_attribute("href", "https://arxiv.org/abs/1511.06233")
     expect(paper).to_have_attribute("target", "_blank")
     expect(paper).to_have_attribute("rel", "noopener noreferrer")
@@ -107,3 +107,43 @@ def test_clicking_in_the_tree_shows_the_same_card_as_the_deep_link(page: Page) -
     area = card_area(page)
     expect(area.get_by_role("link", name="Official code", exact=True)).to_be_visible()
     expect(area.locator("pre")).to_contain_text("Bendale, Boult (2016)")
+
+
+def test_the_abstract_is_shown_with_its_source_between_the_details_and_the_reference(
+    open_at,
+) -> None:
+    page = open_at("?m=4")
+    h.expect_card(page, "OpenMax")
+    area = card_area(page)
+    expect(
+        area.get_by_text("Deep networks have produced significant gains")
+    ).to_be_visible()
+    source = area.get_by_role("link", name="arXiv", exact=True).nth(
+        1
+    )  # paper link comes first
+    expect(source).to_have_attribute("href", "https://arxiv.org/abs/1511.06233")
+    expect(source).to_have_attribute("target", "_blank")
+    order = area.inner_text()
+    assert (
+        order.index("Reference check")
+        < order.index("Abstract")
+        < order.index("Reference\n")
+    )
+
+
+def test_a_method_without_an_abstract_says_so_and_still_has_its_reference(
+    open_at,
+) -> None:
+    page = open_at("?m=112")  # MINAS
+    h.expect_card(page, "MINAS")
+    area = card_area(page)
+    expect(area.get_by_text("none recorded")).to_be_visible()
+    expect(area.locator("pre")).to_contain_text("Faria, de Carvalho, Gama")
+
+
+def test_the_how_to_read_text_explains_abstracts(page: Page) -> None:
+    expect(h.tree(page).locator('[role="treeitem"]').first).to_be_visible()
+    page.get_by_text("How to read", exact=True).click()
+    expect(
+        page.get_by_text("Abstracts were retrieved automatically").first
+    ).to_be_visible()

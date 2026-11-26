@@ -8,6 +8,7 @@ from types import MappingProxyType
 from urllib.parse import quote, urlsplit
 
 from .constants import CODE_TYPES
+from .shown import show
 
 # scheme://host followed by anything that is not whitespace. ``fullmatch`` is used so
 # that a trailing newline cannot slip past the end anchor.
@@ -94,6 +95,6 @@ def parse_code_alt(raw: str) -> tuple[AltCode, ...]:
         kind, separator, url = part.strip().partition("|")
         kind, url = kind.strip(), url.strip()
         if not separator or kind not in _ALT_KINDS or not is_http_url(url):
-            raise ValueError(f"malformed code_alt entry: {part.strip()!r}")
+            raise ValueError(f"malformed code_alt entry: {show(part.strip())}")
         entries.append(AltCode(kind=kind, url=url))
     return tuple(entries)

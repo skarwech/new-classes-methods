@@ -79,3 +79,12 @@ def test_how_to_read_explains_the_also_line() -> None:
 def test_the_description_tells_a_phone_visitor_where_the_sidebar_is() -> None:
     assert "sidebar" in text.description(170)
     assert "phone" in text.description(170)
+
+
+def test_how_to_read_explains_where_abstracts_come_from() -> None:
+    lowered = text.HOW_TO_READ.casefold()
+    assert "**abstracts.**" in lowered
+    for source in ("arxiv", "openalex", "crossref"):
+        assert source in lowered
+    assert "source" in lowered
+    assert "none" in lowered or "no abstract" in lowered

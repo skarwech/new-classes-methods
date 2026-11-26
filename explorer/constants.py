@@ -60,6 +60,36 @@ CHECK_FILTER_LABELS = MappingProxyType(
 
 AUTHORS_COMPLETE_VALUES: tuple[str, ...] = ("yes", "no")
 
+# Abstracts live in data/abstracts.csv, next to the methods file; attached by id.
+ABSTRACTS_FILE_NAME = "abstracts.csv"
+ABSTRACT_FIELDS: tuple[str, ...] = (
+    "abstract",
+    "abstract_source",
+    "abstract_url",
+    "abstract_match",
+)
+# Where an abstract came from ("Manual": typed in by the collection's author) and how it
+# was matched to the method.
+ABSTRACT_SOURCES: tuple[str, ...] = (
+    "arXiv",
+    "OpenAlex",
+    "Crossref",
+    "CVF",
+    "PMLR",
+    "Manual",
+)
+ABSTRACT_MATCHES: tuple[str, ...] = ("arxiv id", "doi", "paper url", "title", "manual")
+MAX_ABSTRACT_CHARS = 8000
+MAX_ABSTRACT_URL_CHARS = 2048
+# The site each source's links must be on; a "Manual" line may link anywhere.
+ABSTRACT_SOURCE_HOSTS: dict[str, tuple[str, ...]] = {
+    "arXiv": ("arxiv.org",),
+    "OpenAlex": ("openalex.org", "doi.org"),
+    "Crossref": ("doi.org",),
+    "CVF": ("openaccess.thecvf.com",),
+    "PMLR": ("proceedings.mlr.press",),
+}
+
 # Deep link: ?m=<id> opens that method with its ancestors expanded.
 SELECTED_PARAM = "m"
 MAX_ID_LENGTH = 32

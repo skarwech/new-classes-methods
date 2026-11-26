@@ -48,6 +48,11 @@ standard ones; check volumes and pages before citing.
 - Incomplete or flagged: check before citing. The entry was flagged, or its author \
 list or venue could not be completed.
 
+**Abstracts.** Abstracts were retrieved automatically from arXiv, OpenAlex, Crossref \
+and the open pages of CVF and PMLR, and each was checked against the title of the \
+method. Every abstract shows its source. Some methods have none, because no open \
+source carries it.
+
 **Papers.** Some methods have no paper link, because no link could be verified; for \
 those only the reference is shown. When the author list is incomplete, the \
 reference ends it with "et al."

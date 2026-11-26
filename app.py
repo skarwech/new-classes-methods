@@ -7,14 +7,13 @@ Run it from this folder with ``streamlit run app.py``. The logic lives in the
 from __future__ import annotations
 
 import functools
-from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 from streamlit_arborist import tree_view
 
 from explorer import text
-from explorer.card import card_markdown, reference_text
+from explorer.abstracts import Version, collection_version, load_collection
 from explorer.constants import (
     CHECK_FILTER_LABELS,
     CHECK_VALUES,
@@ -28,9 +27,10 @@ from explorer.constants import (
     TREE_INDENT,
     TREE_ROW_HEIGHT,
 )
-from explorer.data import DataError, load_methods
+from explorer.data import DataError
 from explorer.export import csv_bytes
 from explorer.filters import Filters, apply_filters, year_bounds
+from explorer.render import render_method
 from explorer.selection import remember_click, resolve_selection
 from explorer.tree import Node, build_tree, leaf_ids, plan_mount, tree_key
 
@@ -44,18 +44,10 @@ _NOT_SENT = object()
 st.set_page_config(page_title=text.TITLE, layout="wide")
 
 
-def file_version(path: Path) -> int:
-    """When the file last changed, so that a replaced CSV is read again."""
-    try:
-        return path.stat().st_mtime_ns
-    except OSError:
-        return 0  # the loader reports the problem
-
-
 @st.cache_data(show_spinner=False)
-def get_methods(path: str, version: int) -> pd.DataFrame:
-    """Read and validate the CSV; read it again when ``version`` changes."""
-    return load_methods(path)
+def get_methods(path: str, version: Version) -> pd.DataFrame:
+    """Read and validate the methods and abstracts; again if ``version`` changes."""
+    return load_collection(path)
 
 
 def render_header(total: int) -> None:
@@ -165,9 +157,7 @@ def render_card(methods: pd.DataFrame, selected: str | None) -> None:
     if selected is None:
         st.markdown(text.HOW_TO_READ)
         return
-    row = methods.loc[methods["id"] == selected].iloc[0].to_dict()
-    st.markdown(card_markdown(row), anchors=False)
-    st.code(reference_text(row), language=None, wrap_lines=True)
+    render_method(methods.loc[methods["id"] == selected].iloc[0].to_dict())
 
 
 def sync_address(selected: str | None) -> None:
@@ -189,7 +179,7 @@ def sync_address(selected: str | None) -> None:
 
 def main() -> None:
     try:
-        methods = get_methods(str(DATA_PATH), file_version(DATA_PATH))
+        methods = get_methods(str(DATA_PATH), collection_version(DATA_PATH))
     except DataError as error:
         st.error(text.DATA_ERROR)
         st.code(str(error), language=None)
